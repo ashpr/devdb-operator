@@ -1,0 +1,12 @@
+apiVersion: devdb.io/v1
+kind: MSSQLDatabase
+metadata:
+  labels:
+    app.kubernetes.io/name: mssqldatabase
+    app.kubernetes.io/instance: mssqldatabase-sample
+    app.kubernetes.io/part-of: devdb-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: devdb-operator
+  name: mssqldatabase-sample
+spec:
+  # TODO(user): Add fields here

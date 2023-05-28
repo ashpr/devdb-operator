@@ -1,0 +1,31 @@
+# permissions for end users to edit mssqlservers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: mssqlserver-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: devdb-operator
+    app.kubernetes.io/part-of: devdb-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: mssqlserver-editor-role
+rules:
+- apiGroups:
+  - devdb.io
+  resources:
+  - mssqlservers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - devdb.io
+  resources:
+  - mssqlservers/status
+  verbs:
+  - get

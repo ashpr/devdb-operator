@@ -1,0 +1,59 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - devdb.io
+  resources:
+  - mssqlServers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - devdb.io
+  resources:
+  - mssqlServers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - devdb.io
+  resources:
+  - mssqlServers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - devdb.io
+  resources:
+  - mssqldatabases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - devdb.io
+  resources:
+  - mssqldatabases/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - devdb.io
+  resources:
+  - mssqldatabases/status
+  verbs:
+  - get
+  - patch
+  - update

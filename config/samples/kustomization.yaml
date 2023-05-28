@@ -1,0 +1,5 @@
+## Append samples you want in your CSV to this file as resources ##
+resources:
+- devdb.io_v1_mssqldatabase.yaml
+- devdb.io_v1_mssqlserver.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples
