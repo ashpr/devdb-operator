@@ -19,9 +19,10 @@ package controllers
 import (
 	"bytes"
 	"context"
-	"database/sql"
+	"errors"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
@@ -61,46 +62,63 @@ type MSSQLDatabaseReconciler struct {
 func (r *MSSQLDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 	mssqlDatabase := &devdbv1.MSSQLDatabase{}
-	//mssqlServer := &devdbv1.MSSQLServer{}
+	mssqlServerPods := &metav1.PartialObjectMetadataList{}
+	mssqlServerPods.SetGroupVersionKind(v1.SchemeGroupVersion.WithKind("PodList"))
 
 	log.Info("⚡️ Event received! ⚡️")
 	log.Info("Request: ", "req", req)
 
 	err := r.Get(ctx, req.NamespacedName, mssqlDatabase)
 
-	server := mssqlDatabase.Spec.Server //fmt.Sprintf("%s.%s.svc.cluster.local", mssqlDatabase.Spec.Server, mssqlDatabase.Namespace)
-	user := "sa"
-	password := "DevPassword123"
-	port := 1433
-
-	log.Info(fmt.Sprintf("Resolving Database for server %s, %d", server, port))
-
-	connString := fmt.Sprintf("server=%s;user id=%s;password=%s;port=%d", server, user, password, port)
-
-	conn, err := sql.Open("mssql", connString)
 	if err != nil {
-		log.Error(err, "Open connection failed:")
+		log.Error(err, "Could not get MSSQLDatabase CR")
 		return ctrl.Result{}, err
 	}
 
-	// Check if Database already exists
-	row := sql.Row{}
-	err = conn.QueryRow("select * from sys.databases where name = $p1", mssqlDatabase.Name).Scan(row)
+	log.Info("Checking existing CR State")
+	//if meta.FindStatusCondition(mssqlDatabase.Status.Conditions, "Ready").Status == metav1.ConditionTrue {
+	//		log.Info("Database is in an OK State. No need to proceed")
+	//		return ctrl.Result{}, nil
+	//	}
 
-	if err != sql.ErrNoRows {
-		log.Info("Database already exists. No action taken")
-		return ctrl.Result{}, nil
+	log.Info("Setting CR State")
+	//meta.SetStatusCondition(&mssqlDatabase.Status.Conditions, metav1.Condition{Type: "Ready", Status: metav1.ConditionUnknown, Reason: "Reconciling", Message: "Starting reconciliation"})
+
+	log.Info("Searching for MSSQL Pods")
+	err = r.List(ctx, mssqlServerPods, client.MatchingLabels{"app": "mssql-server"})
+
+	if err != nil {
+		log.Error(err, "Could not query for SQL Server Pods")
+		//	meta.SetStatusCondition(&mssqlDatabase.Status.Conditions, metav1.Condition{Type: "Ready", Status: metav1.ConditionFalse, Reason: "Failed", Message: "An error was thrown"})
+		return ctrl.Result{}, err
 	}
 
-	log.Info("Database does not exist.")
+	log.Info("Checking for Operator managed MSSQL Pod")
+	if len(mssqlServerPods.Items) == 0 {
+		err = errors.New("No pods were found")
+		log.Error(nil, "No pods found")
+		//	meta.SetStatusCondition(&mssqlDatabase.Status.Conditions, metav1.Condition{Type: "Ready", Status: metav1.ConditionFalse, Reason: "Failed", Message: "An error was thrown"})
+		return ctrl.Result{}, err
+	}
 
-	// Database does not exist. Time to create it.
-	//_, err = conn.Exec(fmt.Sprintf(``, mssqlDatabase.Spec.CloneDirectory, mssqlDatabase.Spec.CloneDirectory, mssqlDatabase.Name))
+	log.Info("Pod found!")
+	serverPod := mssqlServerPods.Items[0]
+
+	log.Info("Running Bash script")
+	command := fmt.Sprintf("/opt/mssql-scripts/create-database.sh /opt/overlay/target/%s %s", mssqlDatabase.Spec.CloneDirectory, mssqlDatabase.Name)
+
+	stdout, stderr, err := ExecuteRemoteCommand(&serverPod, command)
+
+	log.Info(stdout)
+	log.Info(stderr)
 
 	if err != nil {
 		log.Error(err, "Could not create database")
+		//	meta.SetStatusCondition(&mssqlDatabase.Status.Conditions, metav1.Condition{Type: "Ready", Status: metav1.ConditionFalse, Reason: "Failed", Message: "An error was thrown"})
 		return ctrl.Result{}, err
 	}
+
+	//meta.SetStatusCondition(&mssqlDatabase.Status.Conditions, metav1.Condition{Type: "Ready", Status: metav1.ConditionTrue, Reason: "Database Deployment", Message: "Completed"})
 
 	return ctrl.Result{}, nil
 }
@@ -113,7 +131,7 @@ func (r *MSSQLDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // Handy script for remote execution on the target pod
-func ExecuteRemoteCommand(pod *v1.Pod, command string) (string, string, error) {
+func ExecuteRemoteCommand(pod *metav1.PartialObjectMetadata, command string) (string, string, error) {
 	kubeCfg := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		clientcmd.NewDefaultClientConfigLoadingRules(),
 		&clientcmd.ConfigOverrides{},

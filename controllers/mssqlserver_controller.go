@@ -221,12 +221,17 @@ func (r *MSSQLServerReconciler) createDeployment(MSSQLServerCR *devdbv1.MSSQLSer
 		},
 	}
 
+	overlaycmd := ""
+
 	for _, clone := range MSSQLServerCR.Spec.Clones {
 		// Map this clone to a volumemount in the Clones directory
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      clone.Name,
 			MountPath: "/opt/clones/" + clone.Name,
+			ReadOnly:  true,
 		})
+		overlaycmd = overlaycmd + fmt.Sprintf("mkdir -p /opt/overlay/upper/%s && mkdir -p /opt/overlay/work/%s && mkdir -p /opt/overlay/target/%s && mount -t overlay -o lowerdir=/opt/clones/%s,upperdir=/opt/overlay/upper/%s,workdir=/opt/overlay/work/%s overlay /opt/overlay/target/%s && ",
+			clone.Name, clone.Name, clone.Name, clone.Name, clone.Name, clone.Name, clone.Name)
 	}
 
 	priviledged := true
@@ -251,7 +256,7 @@ func (r *MSSQLServerReconciler) createDeployment(MSSQLServerCR *devdbv1.MSSQLSer
 						Image:   "mcr.microsoft.com/mssql/server:2022-latest",
 						Name:    "mssql",
 						Command: []string{"/bin/sh", "-c"},
-						Args:    []string{"mkdir -p /opt/overlay/upper && mkdir -p /opt/overlay/work && mkdir -p /opt/overlay/target && mount -t overlay -o lowerdir=/opt/clones,upperdir=/opt/overlay/upper,workdir=/opt/overlay/work overlay /opt/overlay/target && /opt/mssql/bin/sqlservr"},
+						Args:    []string{fmt.Sprintf("%s /opt/mssql/bin/sqlservr", overlaycmd)},
 						SecurityContext: &corev1.SecurityContext{
 							Privileged: &priviledged,
 							RunAsUser:  &runAsUser,
